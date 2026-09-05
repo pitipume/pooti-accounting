@@ -19,6 +19,11 @@ export interface EntryRow {
   correctionOfEntryId?: string;
 }
 
+export interface BranchRow {
+  branchCode: string;
+  branchName: string;
+}
+
 export interface BranchManagerRow {
   lineUserId: string;
   branchCode: string;
@@ -45,35 +50,47 @@ export class SheetsService {
     this.spreadsheetId = config.getOrThrow<string>('GOOGLE_SHEET_ID');
   }
 
-  async appendEntry(entry: EntryRow): Promise<void> {
-    const netAmount = entry.incomeAmount - entry.expenseAmount;
+  /** One submission can carry multiple line items — written as one batched append so they land as consecutive sheet rows. */
+  async appendEntries(entries: EntryRow[]): Promise<void> {
+    if (entries.length === 0) return;
+
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
       range: 'Entries!A:O',
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
-        values: [
-          [
-            entry.entryId,
-            entry.businessDate,
-            entry.branchCode,
-            entry.branchName,
-            entry.incomeAmount,
-            entry.expenseAmount,
-            netAmount,
-            entry.category ?? '',
-            entry.notes ?? '',
-            entry.submittedByLineUserId,
-            entry.submittedByDisplayName,
-            entry.idempotencyKey,
-            entry.receivedAtTimestamp,
-            entry.status,
-            entry.correctionOfEntryId ?? '',
-          ],
-        ],
+        values: entries.map((entry) => [
+          entry.entryId,
+          entry.businessDate,
+          entry.branchCode,
+          entry.branchName,
+          entry.incomeAmount,
+          entry.expenseAmount,
+          entry.incomeAmount - entry.expenseAmount,
+          entry.category ?? '',
+          entry.notes ?? '',
+          entry.submittedByLineUserId,
+          entry.submittedByDisplayName,
+          entry.idempotencyKey,
+          entry.receivedAtTimestamp,
+          entry.status,
+          entry.correctionOfEntryId ?? '',
+        ]),
       },
     });
+  }
+
+  /** Active branches for the submission form's dropdown. Maintained by hand in the Branches tab. */
+  async getBranches(): Promise<BranchRow[]> {
+    const res = await this.sheets.spreadsheets.values.get({
+      spreadsheetId: this.spreadsheetId,
+      range: 'Branches!A2:C',
+    });
+    const rows = res.data.values ?? [];
+    return rows
+      .filter((row) => row[0] && row[2]?.toUpperCase() === 'TRUE')
+      .map((row) => ({ branchCode: row[0], branchName: row[1] }));
   }
 
   async getBranchManagers(): Promise<BranchManagerRow[]> {

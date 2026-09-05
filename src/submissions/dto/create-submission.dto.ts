@@ -1,4 +1,28 @@
-import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsDateString,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+export class SubmissionItemDto {
+  @IsIn(['income', 'outcome'])
+  type!: 'income' | 'outcome';
+
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsNumber()
+  @Min(0)
+  price!: number;
+}
 
 export class CreateSubmissionDto {
   @IsString()
@@ -8,13 +32,18 @@ export class CreateSubmissionDto {
   @IsDateString()
   businessDate!: string;
 
-  @IsNumber()
-  @Min(0)
-  incomeAmount!: number;
+  @IsString()
+  @IsNotEmpty()
+  branchCode!: string;
 
-  @IsNumber()
-  @Min(0)
-  expenseAmount!: number;
+  @IsString()
+  @IsNotEmpty()
+  branchName!: string;
+
+  @ValidateNested({ each: true })
+  @Type(() => SubmissionItemDto)
+  @ArrayMinSize(1)
+  items!: SubmissionItemDto[];
 
   @IsOptional()
   @IsString()

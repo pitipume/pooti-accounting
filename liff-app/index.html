@@ -20,7 +20,7 @@
   form { display: flex; flex-direction: column; gap: 16px; }
   label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
   .hint { font-size: 12px; color: #888; font-weight: 400; }
-  input, textarea {
+  input, textarea, select {
     width: 100%;
     font-size: 16px;
     padding: 12px;
@@ -49,6 +49,34 @@
   }
   #status.success { display: block; background: #e6f7ed; color: #0a7a3d; }
   #status.error { display: block; background: #fdecea; color: #b3261e; }
+
+  #items { display: flex; flex-direction: column; gap: 10px; }
+  .item-row {
+    display: grid;
+    grid-template-columns: 96px 1fr 96px 32px;
+    gap: 6px;
+    align-items: center;
+    background: #fff;
+    padding: 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+  }
+  .item-row select, .item-row input { padding: 10px 8px; font-size: 14px; }
+  .item-row .remove-row {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 6px;
+    background: #fdecea;
+    color: #b3261e;
+    font-size: 18px;
+    line-height: 1;
+  }
+  #add-row-btn {
+    background: #fff;
+    color: #06c755;
+    border: 1px dashed #06c755;
+  }
 </style>
 </head>
 <body>
@@ -57,17 +85,23 @@
 
   <form id="entry-form">
     <div>
+      <label for="branch_code">สาขา / Branch</label>
+      <select id="branch_code" required disabled>
+        <option value="">กำลังโหลด... / Loading...</option>
+      </select>
+    </div>
+    <div>
       <label for="business_date">วันที่ / Date</label>
       <input type="date" id="business_date" required />
     </div>
+
     <div>
-      <label for="income_amount">รายรับ / Income (บาท)</label>
-      <input type="number" id="income_amount" inputmode="decimal" min="0" step="0.01" required />
+      <label>รายการ / Items</label>
+      <div id="items"></div>
     </div>
-    <div>
-      <label for="expense_amount">รายจ่าย / Expense (บาท)</label>
-      <input type="number" id="expense_amount" inputmode="decimal" min="0" step="0.01" required />
-    </div>
+
+    <button type="button" id="add-row-btn">+ เพิ่มรายการ / Add row</button>
+
     <div>
       <label for="notes">หมายเหตุ / Notes <span class="hint">(optional)</span></label>
       <textarea id="notes"></textarea>
@@ -81,11 +115,59 @@
   // Replaced with the real LIFF ID after registering the LIFF app in LINE console.
   const LIFF_ID = '2011133020-xLcCRZfd';
   const API_BASE_URL = 'https://pooti-accounting-backend-740865262642.asia-southeast1.run.app';
+  const STARTING_ROWS = 3;
 
   const statusEl = document.getElementById('status');
   const submitBtn = document.getElementById('submit-btn');
   const dateInput = document.getElementById('business_date');
+  const branchSelect = document.getElementById('branch_code');
+  const itemsEl = document.getElementById('items');
+  const addRowBtn = document.getElementById('add-row-btn');
   dateInput.value = new Date().toISOString().slice(0, 10);
+
+  async function loadBranches() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/branches`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const branches = await res.json();
+
+      if (!Array.isArray(branches) || branches.length === 0) {
+        throw new Error('No branches configured');
+      }
+
+      branchSelect.innerHTML = '';
+      for (const b of branches) {
+        const opt = document.createElement('option');
+        opt.value = b.branchCode;
+        opt.textContent = b.branchName;
+        branchSelect.appendChild(opt);
+      }
+      branchSelect.disabled = false;
+    } catch (err) {
+      branchSelect.innerHTML = '<option value="">โหลดสาขาไม่สำเร็จ / Failed to load branches</option>';
+      showStatus('error', 'โหลดรายชื่อสาขาไม่สำเร็จ / Could not load branches: ' + err.message);
+      submitBtn.disabled = true;
+    }
+  }
+
+  function addItemRow() {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <select class="item-type">
+        <option value="income">รายรับ</option>
+        <option value="outcome">รายจ่าย</option>
+      </select>
+      <input type="text" class="item-name" placeholder="ชื่อรายการ / Name" />
+      <input type="number" class="item-price" placeholder="ราคา / Price" inputmode="decimal" min="0" step="0.01" />
+      <button type="button" class="remove-row" aria-label="Remove row">×</button>
+    `;
+    row.querySelector('.remove-row').addEventListener('click', () => row.remove());
+    itemsEl.appendChild(row);
+  }
+
+  addRowBtn.addEventListener('click', addItemRow);
+  for (let i = 0; i < STARTING_ROWS; i++) addItemRow();
 
   function showStatus(kind, text) {
     statusEl.className = kind;
@@ -97,6 +179,18 @@
     return 'idk-' + Date.now() + '-' + Math.random().toString(16).slice(2);
   }
 
+  function collectItems() {
+    return Array.from(itemsEl.querySelectorAll('.item-row'))
+      .map((row) => ({
+        type: row.querySelector('.item-type').value,
+        name: row.querySelector('.item-name').value.trim(),
+        price: Number(row.querySelector('.item-price').value),
+      }))
+      // A row left completely blank (no name typed, no price entered) is just
+      // an unused extra slot from the starting 3 — not a validation error.
+      .filter((item) => item.name !== '' || (!Number.isNaN(item.price) && item.price !== 0));
+  }
+
   async function init() {
     try {
       await liff.init({ liffId: LIFF_ID });
@@ -104,6 +198,7 @@
         liff.login();
         return;
       }
+      await loadBranches();
     } catch (err) {
       showStatus('error', 'เปิดผ่านแอป LINE เท่านั้น / Please open this from the LINE app. (' + err.message + ')');
       submitBtn.disabled = true;
@@ -112,14 +207,32 @@
 
   document.getElementById('entry-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (!branchSelect.value) {
+      showStatus('error', 'กรุณาเลือกสาขา / Please select a branch.');
+      return;
+    }
+
+    const items = collectItems();
+    if (items.length === 0) {
+      showStatus('error', 'กรุณากรอกอย่างน้อย 1 รายการ / Please fill in at least one item.');
+      return;
+    }
+    const invalid = items.find((item) => !item.name || !(item.price > 0));
+    if (invalid) {
+      showStatus('error', 'แต่ละรายการต้องมีชื่อและราคามากกว่า 0 / Every item needs a name and a price greater than 0.');
+      return;
+    }
+
     submitBtn.disabled = true;
     showStatus('success', 'กำลังบันทึก... / Submitting...');
 
     const payload = {
       idToken: liff.getIDToken(),
       businessDate: dateInput.value,
-      incomeAmount: Number(document.getElementById('income_amount').value),
-      expenseAmount: Number(document.getElementById('expense_amount').value),
+      branchCode: branchSelect.value,
+      branchName: branchSelect.selectedOptions[0].textContent,
+      items,
       notes: document.getElementById('notes').value,
       idempotencyKey: generateIdempotencyKey(),
     };
@@ -139,10 +252,12 @@
       const result = await res.json();
       showStatus(
         'success',
-        `บันทึกสำเร็จ / Saved: ${result.branchName ?? ''} รายรับ ${payload.incomeAmount.toLocaleString()} รายจ่าย ${payload.expenseAmount.toLocaleString()}`
+        `บันทึกสำเร็จ / Saved: ${result.branchName ?? ''} รายรับ ${result.incomeAmount.toLocaleString()} รายจ่าย ${result.expenseAmount.toLocaleString()}`
       );
       document.getElementById('entry-form').reset();
       dateInput.value = new Date().toISOString().slice(0, 10);
+      itemsEl.innerHTML = '';
+      for (let i = 0; i < STARTING_ROWS; i++) addItemRow();
     } catch (err) {
       showStatus('error', 'บันทึกไม่สำเร็จ / Failed: ' + err.message);
     } finally {
