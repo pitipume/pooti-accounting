@@ -4,6 +4,7 @@ import { WebhookModule } from './webhook/webhook.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { BranchesModule } from './branches/branches.module';
 import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
     SubmissionsModule,
     BranchesModule,
     FeatureFlagsModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

@@ -83,6 +83,38 @@ export class SheetsService {
     });
   }
 
+  /**
+   * Raw entry rows for the dashboard, filtered to an inclusive business_date
+   * range. Aggregation (totals, per-branch sums, trend) happens client-side —
+   * row counts here are small enough that a bespoke server-side aggregation
+   * query isn't worth the added surface.
+   */
+  async getEntries(from: string, to: string): Promise<EntryRow[]> {
+    const res = await this.sheets.spreadsheets.values.get({
+      spreadsheetId: this.spreadsheetId,
+      range: 'Entries!A2:P',
+    });
+    const rows = res.data.values ?? [];
+    return rows
+      .filter((row) => row[0] && row[1] >= from && row[1] <= to && row[13] === 'OK')
+      .map((row) => ({
+        entryId: row[0],
+        businessDate: row[1],
+        branchCode: row[2],
+        branchName: row[3],
+        incomeAmount: Number(row[4]) || 0,
+        expenseAmount: Number(row[5]) || 0,
+        category: row[7] || undefined,
+        notes: row[8] || undefined,
+        submittedByLineUserId: row[9],
+        submittedByDisplayName: row[10],
+        idempotencyKey: row[11],
+        receivedAtTimestamp: row[12],
+        status: 'OK',
+        imageUrl: row[15] || undefined,
+      }));
+  }
+
   /** Active branches for the submission form's dropdown. Maintained by hand in the Branches tab. */
   async getBranches(): Promise<BranchRow[]> {
     const res = await this.sheets.spreadsheets.values.get({

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Pooti Accounting — Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --income:         #2a78d6;
+    --income-wash:    rgba(42,120,214,0.10);
+    --expense:        #e34948;
+    --expense-wash:   rgba(227,73,72,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --income:         #3987e5;
+      --income-wash:    rgba(57,135,229,0.14);
+      --expense:        #e66767;
+      --expense-wash:   rgba(230,103,103,0.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    padding: 16px 14px 40px;
+    max-width: 560px;
+    margin-inline: auto;
+  }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .subtitle { font-size: 12px; color: var(--text-secondary); margin: 0 0 16px; }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .card h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--text-secondary); }
+
+  /* Filters — one row, above everything else */
+  .filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; margin-bottom: 14px; }
+  .chip {
+    flex: none;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    cursor: pointer;
+    min-height: 36px;
+  }
+  .chip.active { background: var(--income); color: #fff; border-color: var(--income); }
+  .custom-range { display: none; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .custom-range.open { display: flex; }
+  .custom-range input[type="date"] {
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+  }
+  .custom-range button {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: none;
+    background: var(--income);
+    color: #fff;
+  }
+
+  /* KPI row */
+  .kpi-row { display: flex; gap: 10px; margin-bottom: 14px; }
+  .kpi { flex: 1; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .kpi .label { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+  .kpi .value { font-size: 18px; font-weight: 600; }
+
+  /* Legend */
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-key { width: 14px; height: 2px; border-radius: 2px; }
+
+  .view-toggle {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--income);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    float: right;
+  }
+
+  /* Diverging branch bars */
+  .branch-row { padding: 10px 0; border-top: 1px solid var(--gridline); cursor: pointer; }
+  .branch-row:first-child { border-top: none; }
+  .branch-row.selected { background: var(--income-wash); border-radius: 8px; }
+  .branch-row-top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .branch-row-top .name { font-weight: 600; }
+  .branch-row-top .net { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+  .branch-track { position: relative; height: 24px; }
+  .branch-track .baseline { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--baseline); }
+  .branch-track .bar { position: absolute; top: 2px; bottom: 2px; }
+  .branch-track .bar-income { left: 50%; background: var(--income); border-radius: 0 4px 4px 0; }
+  .branch-track .bar-expense { right: 50%; background: var(--expense); border-radius: 4px 0 0 4px; }
+
+  /* Table view */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--gridline); }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 11px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trend sparkline */
+  .trend-svg { width: 100%; height: 80px; display: block; }
+
+  .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 24px 0; }
+  .refetching { opacity: 0.5; pointer-events: none; }
+  .hint { font-size: 12px; color: var(--text-muted); }
+  a.photo-link { color: var(--income); }
+</style>
+</head>
+<body>
+  <h1>แดชบอร์ด Pooti Accounting</h1>
+  <p class="subtitle">Income / expense overview across branches</p>
+
+  <div class="filters" id="filter-chips">
+    <button class="chip" data-range="today">วันนี้ / Today</button>
+    <button class="chip" data-range="7d">7 วัน / 7d</button>
+    <button class="chip" data-range="month">เดือนนี้ / Month</button>
+    <button class="chip" data-range="custom">กำหนดเอง / Custom</button>
+  </div>
+  <div class="custom-range" id="custom-range">
+    <input type="date" id="custom-from" />
+    <span class="hint">ถึง / to</span>
+    <input type="date" id="custom-to" />
+    <button type="button" id="apply-custom-range">ใช้ / Apply</button>
+  </div>
+
+  <div id="dashboard-content">
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">รายรับรวม / Total income</div><div class="value" id="kpi-income">฿0</div></div>
+      <div class="kpi"><div class="label">รายจ่ายรวม / Total expense</div><div class="value" id="kpi-expense">฿0</div></div>
+      <div class="kpi"><div class="label">สุทธิ / Net</div><div class="value" id="kpi-net">฿0</div></div>
+    </div>
+
+    <div class="card" id="branch-card">
+      <button class="view-toggle" id="table-toggle-btn">ดูตาราง / Table view</button>
+      <h2>เปรียบเทียบทุกสาขา / All branches compared</h2>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-key" style="background: var(--income)"></span>รายรับ / Income</div>
+        <div class="legend-item"><span class="legend-key" style="background: var(--expense)"></span>รายจ่าย / Expense</div>
+      </div>
+      <div id="branch-chart-view"></div>
+      <div id="branch-table-view" class="table-wrap" style="display:none"></div>
+    </div>
+
+    <div class="card" id="detail-card" style="display:none">
+      <h2 id="detail-title"></h2>
+      <div id="detail-trend"></div>
+      <div class="table-wrap" id="detail-table"></div>
+    </div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const ACCESS_KEY = params.get('key') || '';
+  const API_BASE_URL = 'https://pooti-accounting-backend-740865262642.asia-southeast1.run.app';
+
+  const contentEl = document.getElementById('dashboard-content');
+  const branchChartView = document.getElementById('branch-chart-view');
+  const branchTableView = document.getElementById('branch-table-view');
+  const tableToggleBtn = document.getElementById('table-toggle-btn');
+  const detailCard = document.getElementById('detail-card');
+  const detailTitle = document.getElementById('detail-title');
+  const detailTrend = document.getElementById('detail-trend');
+  const detailTable = document.getElementById('detail-table');
+
+  let currentEntries = [];
+  let selectedBranchCode = null;
+  let showingTable = false;
+
+  function todayInBangkok() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date());
+  }
+
+  function addDays(dateStr, delta) {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function firstOfMonthInBangkok() {
+    const today = todayInBangkok();
+    return today.slice(0, 8) + '01';
+  }
+
+  function money(n) {
+    return '฿' + Math.round(n).toLocaleString('en-US');
+  }
+
+  function setActiveChip(range) {
+    document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.range === range));
+  }
+
+  async function fetchEntries(from, to) {
+    contentEl.classList.add('refetching');
+    try {
+      const url = `${API_BASE_URL}/dashboard/entries?from=${from}&to=${to}&key=${encodeURIComponent(ACCESS_KEY)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      currentEntries = await res.json();
+      selectedBranchCode = null;
+      detailCard.style.display = 'none';
+      render();
+    } catch (err) {
+      branchChartView.innerHTML = '';
+      branchTableView.innerHTML = '';
+      const p = document.createElement('div');
+      p.className = 'empty-state';
+      p.textContent = 'โหลดข้อมูลไม่สำเร็จ / Could not load data: ' + err.message;
+      branchChartView.appendChild(p);
+    } finally {
+      contentEl.classList.remove('refetching');
+    }
+  }
+
+  function render() {
+    const totalIncome = currentEntries.reduce((s, e) => s + e.incomeAmount, 0);
+    const totalExpense = currentEntries.reduce((s, e) => s + e.expenseAmount, 0);
+    document.getElementById('kpi-income').textContent = money(totalIncome);
+    document.getElementById('kpi-expense').textContent = money(totalExpense);
+    document.getElementById('kpi-net').textContent = money(totalIncome - totalExpense);
+
+    const byBranch = new Map();
+    for (const e of currentEntries) {
+      if (!byBranch.has(e.branchCode)) {
+        byBranch.set(e.branchCode, { branchCode: e.branchCode, branchName: e.branchName, income: 0, expense: 0 });
+      }
+      const b = byBranch.get(e.branchCode);
+      b.income += e.incomeAmount;
+      b.expense += e.expenseAmount;
+    }
+    const branches = Array.from(byBranch.values())
+      .map((b) => ({ ...b, net: b.income - b.expense }))
+      .sort((a, b) => b.net - a.net);
+
+    renderBranchChart(branches);
+    renderBranchTable(branches);
+
+    if (selectedBranchCode) renderDetail(selectedBranchCode, branches);
+  }
+
+  function renderBranchChart(branches) {
+    branchChartView.innerHTML = '';
+    if (branches.length === 0) {
+      const p = document.createElement('div');
+      p.className = 'empty-state';
+      p.textContent = 'ไม่มีข้อมูลในช่วงนี้ / No data in this range';
+      branchChartView.appendChild(p);
+      return;
+    }
+    const maxVal = Math.max(...branches.flatMap((b) => [b.income, b.expense]), 1);
+
+    for (const b of branches) {
+      const row = document.createElement('div');
+      row.className = 'branch-row' + (b.branchCode === selectedBranchCode ? ' selected' : '');
+      row.dataset.branchCode = b.branchCode;
+
+      const top = document.createElement('div');
+      top.className = 'branch-row-top';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = b.branchName;
+      const net = document.createElement('span');
+      net.className = 'net';
+      net.textContent = money(b.net);
+      top.appendChild(name);
+      top.appendChild(net);
+
+      const track = document.createElement('div');
+      track.className = 'branch-track';
+      const baseline = document.createElement('div');
+      baseline.className = 'baseline';
+      const incomeBar = document.createElement('div');
+      incomeBar.className = 'bar bar-income';
+      incomeBar.style.width = (b.income / maxVal) * 50 + '%';
+      const expenseBar = document.createElement('div');
+      expenseBar.className = 'bar bar-expense';
+      expenseBar.style.width = (b.expense / maxVal) * 50 + '%';
+      track.append(baseline, incomeBar, expenseBar);
+
+      row.append(top, track);
+      row.addEventListener('click', () => {
+        selectedBranchCode = b.branchCode;
+        render();
+        detailCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+      branchChartView.appendChild(row);
+    }
+  }
+
+  function renderBranchTable(branches) {
+    branchTableView.innerHTML = '';
+    if (branches.length === 0) return;
+    const table = document.createElement('table');
+    table.innerHTML = `
+      <thead><tr>
+        <th>สาขา / Branch</th>
+        <th class="num">รายรับ</th>
+        <th class="num">รายจ่าย</th>
+        <th class="num">สุทธิ</th>
+      </tr></thead>
+    `;
+    const tbody = document.createElement('tbody');
+    for (const b of branches) {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      const tdName = document.createElement('td');
+      tdName.textContent = b.branchName;
+      const tdIncome = document.createElement('td');
+      tdIncome.className = 'num';
+      tdIncome.textContent = money(b.income);
+      const tdExpense = document.createElement('td');
+      tdExpense.className = 'num';
+      tdExpense.textContent = money(b.expense);
+      const tdNet = document.createElement('td');
+      tdNet.className = 'num';
+      tdNet.textContent = money(b.net);
+      tr.append(tdName, tdIncome, tdExpense, tdNet);
+      tr.addEventListener('click', () => {
+        selectedBranchCode = b.branchCode;
+        render();
+        detailCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    branchTableView.appendChild(table);
+  }
+
+  tableToggleBtn.addEventListener('click', () => {
+    showingTable = !showingTable;
+    branchChartView.style.display = showingTable ? 'none' : '';
+    branchTableView.style.display = showingTable ? '' : 'none';
+    tableToggleBtn.textContent = showingTable ? 'ดูกราฟ / Chart view' : 'ดูตาราง / Table view';
+  });
+
+  function renderDetail(branchCode, branches) {
+    const branch = branches.find((b) => b.branchCode === branchCode);
+    const entries = currentEntries
+      .filter((e) => e.branchCode === branchCode)
+      .sort((a, b) => a.businessDate.localeCompare(b.businessDate));
+
+    detailCard.style.display = '';
+    detailTitle.textContent = branch ? branch.branchName : branchCode;
+
+    // Trend line only makes sense across more than one distinct day.
+    const byDate = new Map();
+    for (const e of entries) {
+      byDate.set(e.businessDate, (byDate.get(e.businessDate) || 0) + e.incomeAmount - e.expenseAmount);
+    }
+    const days = Array.from(byDate.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    detailTrend.innerHTML = '';
+    if (days.length > 1) {
+      detailTrend.appendChild(renderTrendSvg(days));
+    }
+
+    detailTable.innerHTML = '';
+    const table = document.createElement('table');
+    table.innerHTML = `
+      <thead><tr>
+        <th>วันที่</th>
+        <th>รายการ</th>
+        <th class="num">จำนวน</th>
+        <th>รูป</th>
+      </tr></thead>
+    `;
+    const tbody = document.createElement('tbody');
+    for (const e of entries) {
+      const tr = document.createElement('tr');
+      const tdDate = document.createElement('td');
+      tdDate.textContent = e.businessDate;
+      const tdName = document.createElement('td');
+      tdName.textContent = e.category || '';
+      const tdAmount = document.createElement('td');
+      tdAmount.className = 'num';
+      const isIncome = e.incomeAmount > 0;
+      tdAmount.textContent = (isIncome ? '+' : '-') + money(isIncome ? e.incomeAmount : e.expenseAmount).slice(1);
+      const tdPhoto = document.createElement('td');
+      if (e.imageUrl) {
+        const a = document.createElement('a');
+        a.href = e.imageUrl;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = 'photo-link';
+        a.textContent = 'ดูรูป';
+        tdPhoto.appendChild(a);
+      }
+      tr.append(tdDate, tdName, tdAmount, tdPhoto);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    detailTable.appendChild(table);
+  }
+
+  function renderTrendSvg(days) {
+    const width = 300, height = 80, padding = 8;
+    const values = days.map((d) => d[1]);
+    const min = Math.min(...values, 0);
+    const max = Math.max(...values, 0);
+    const range = max - min || 1;
+    const x = (i) => padding + (i / (days.length - 1)) * (width - padding * 2);
+    const y = (v) => height - padding - ((v - min) / range) * (height - padding * 2);
+
+    const points = values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+    const areaPoints = `${x(0)},${y(0)} ${points} ${x(values.length - 1)},${y(0)}`;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('class', 'trend-svg');
+    svg.setAttribute('preserveAspectRatio', 'none');
+
+    const baseline = document.createElementNS(svg.namespaceURI, 'line');
+    baseline.setAttribute('x1', padding); baseline.setAttribute('x2', width - padding);
+    baseline.setAttribute('y1', y(0)); baseline.setAttribute('y2', y(0));
+    baseline.setAttribute('stroke', 'var(--gridline)');
+    baseline.setAttribute('stroke-width', '1');
+
+    const area = document.createElementNS(svg.namespaceURI, 'polygon');
+    area.setAttribute('points', areaPoints);
+    area.setAttribute('fill', 'var(--income)');
+    area.setAttribute('opacity', '0.1');
+
+    const line = document.createElementNS(svg.namespaceURI, 'polyline');
+    line.setAttribute('points', points);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', 'var(--income)');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-linejoin', 'round');
+    line.setAttribute('stroke-linecap', 'round');
+
+    svg.append(baseline, area, line);
+    return svg;
+  }
+
+  document.getElementById('filter-chips').addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip');
+    if (!btn) return;
+    const range = btn.dataset.range;
+    const today = todayInBangkok();
+    const customRangeEl = document.getElementById('custom-range');
+
+    if (range === 'custom') {
+      customRangeEl.classList.add('open');
+      setActiveChip('custom');
+      return;
+    }
+    customRangeEl.classList.remove('open');
+    setActiveChip(range);
+
+    if (range === 'today') fetchEntries(today, today);
+    else if (range === '7d') fetchEntries(addDays(today, -6), today);
+    else if (range === 'month') fetchEntries(firstOfMonthInBangkok(), today);
+  });
+
+  document.getElementById('apply-custom-range').addEventListener('click', () => {
+    const from = document.getElementById('custom-from').value;
+    const to = document.getElementById('custom-to').value;
+    if (!from || !to) return;
+    fetchEntries(from, to);
+  });
+
+  // Default view: today.
+  const today = todayInBangkok();
+  document.getElementById('custom-from').value = today;
+  document.getElementById('custom-to').value = today;
+  setActiveChip('today');
+  fetchEntries(today, today);
+</script>
+</body>
+</html>
