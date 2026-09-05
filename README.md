@@ -9,12 +9,15 @@ Full architecture, data model, and milestones: see the plan this was built from
 
 ## Status
 
-**M1 deployed.** NestJS webhook service (signature verification + stray-text reply)
-is live on Cloud Run: `https://pooti-accounting-backend-740865262642.asia-southeast1.run.app`,
-running as `sheets-writer@pooti-accounting.iam.gserviceaccount.com`. LINE webhook URL
-configured and verified. `SheetsService` (M2/M3) was built early and verified against
-the real spreadsheet (read + write both confirmed working). Remaining before M2: Rich
-Menu + LIFF app.
+**M1 + M2 deployed.** NestJS backend (webhook + `/submissions` + `/branches`) is live
+on Cloud Run: `https://pooti-accounting-backend-740865262642.asia-southeast1.run.app`,
+running as `sheets-writer@pooti-accounting.iam.gserviceaccount.com`. LIFF form is live
+on Firebase Hosting (not Vercel — plan changed): `https://pooti-accounting.web.app`,
+opened via `https://liff.line.me/2011133020-xLcCRZfd`. Branch managers submit a
+variable number of income/outcome line items per day, picking their branch from a
+dropdown (`Branches` sheet tab); each item lands as its own row in `Entries`.
+Remaining before M3: real per-manager branch auto-resolution (currently
+manually-picked each submit) and the Rich Menu entry point.
 
 ## Before running anything: M0 setup checklist
 
@@ -23,8 +26,8 @@ These are manual steps in external consoles — nothing here to code yet:
 - [x] **LINE Developers console** (developers.line.biz): Provider + Messaging API
       Channel created. Channel Secret and Channel Access Token are in local `.env`
       (not committed).
-- [ ] **LIFF app**: add a LIFF app under the same channel (needed for M2, can do now
-      or later — endpoint URL isn't final until the Vercel form exists).
+- [x] **LIFF app**: added under the LINE Login channel, endpoint is the Firebase
+      Hosting URL (`https://pooti-accounting.web.app`) — see "Deploying" below.
 - [ ] **LINE Official Account Manager**: turn off the default greeting/auto-reply
       message, turn on "Use webhook."
 - [ ] Add the OA as a friend from your own LINE account so you can test it.
@@ -36,9 +39,12 @@ These are manual steps in external consoles — nothing here to code yet:
 - [x] **Google Sheet** created (`GOOGLE_SHEET_ID` in `.env`), `Entries` and
       `BranchManagers` tabs correctly named and headered, shared with the service
       account as Editor. Verified: the app can read and write real rows.
-- [ ] `gcloud` CLI not installed yet — needed for the Cloud Run deploy step (M1).
-- [ ] **Vercel account** ready for the LIFF form (M2) — you already have this from
-      `twon-next-nest`.
+- [x] `gcloud` CLI installed and authenticated as `pootibkk@gmail.com`.
+- [x] `firebase` CLI installed — hosts the LIFF form (M2). **Gotcha**: `firebase`
+      logs in separately from `gcloud`; run `firebase login:list` and if it's not
+      showing `pootibkk@gmail.com` as active, run
+      `firebase login:use pootibkk@gmail.com` before deploying, or `firebase deploy`
+      fails with "Failed to get Firebase project" even though the project exists.
 
 ## GCP setup (first time walkthrough)
 
@@ -96,7 +102,46 @@ The webhook listens on `POST /webhook`. LINE requires a public HTTPS URL, so loc
 testing needs a tunnel (e.g. `ngrok http 8080`) pointed at the LINE console's webhook
 URL setting during development.
 
-## Deploying to Cloud Run
+## Deploying
+
+Two independent deploy targets, both manual — **`git push` does not deploy anything.**
+There's no CI/CD wired up, so code sitting on GitHub is not the same as what's
+actually live until you run one (or both) of the commands below.
+
+| | serves | source | live URL |
+|---|---|---|---|
+| Frontend | `liff-app/index.html` (static) | Firebase Hosting | `https://pooti-accounting.web.app` |
+| Backend | NestJS API (webhook, `/submissions`, `/branches`) | Cloud Run | `https://pooti-accounting-backend-740865262642.asia-southeast1.run.app` |
+
+Deploy the frontend after any change to `liff-app/`; deploy the backend after any
+change to `src/`. They're unrelated — changing one never requires redeploying the
+other.
+
+### Frontend → Firebase Hosting
+
+```bash
+firebase login:list                       # confirm pootibkk@gmail.com is active
+firebase login:use pootibkk@gmail.com     # only if it isn't (see M0 checklist gotcha)
+
+firebase deploy --only hosting
+```
+Uploads everything in `liff-app/` (per `firebase.json`) as static files. Takes
+~10 seconds, no build step, no confirmation prompts.
+
+### Backend → Cloud Run
+
+Routine redeploy (service already exists — env vars and the service account are
+already attached to it and carry over automatically to the new revision):
+```bash
+gcloud run deploy pooti-accounting-backend \
+  --source . \
+  --region asia-southeast1
+```
+Builds `Dockerfile` via Cloud Build, takes ~2-3 minutes, asks to confirm the source
+directory and (once) to enable the Cloud Build API.
+
+<details>
+<summary>First-time service creation (already done once — kept for disaster recovery)</summary>
 
 ```bash
 gcloud auth login                          # pick the Pooti Google account
@@ -107,13 +152,14 @@ gcloud run deploy pooti-accounting-backend \
   --region asia-southeast1 \
   --allow-unauthenticated \
   --service-account sheets-writer@pooti-accounting.iam.gserviceaccount.com \
-  --env-vars-file .env-vars-deploy.yaml   # LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN / GOOGLE_SHEET_ID
+  --env-vars-file .env-vars-deploy.yaml   # LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN / GOOGLE_SHEET_ID / LINE_LOGIN_CHANNEL_ID
                                             # (gitignored, delete after deploy — never commit it)
 ```
 
 Note: `--service-account` is what lets Cloud Run write to the Sheet with no key file
 — it runs *as* `sheets-writer@...` directly, using Application Default Credentials,
-same code path as local dev but no JSON key involved in production.
+same code path as local dev but no JSON key involved in production. Once set on the
+service this way, later plain redeploys keep it — no need to pass it again.
 
 **First-time-project snag**: on a brand-new GCP project, `--source` deploys can fail
 with `PERMISSION_DENIED... default service account is missing required IAM
@@ -131,4 +177,14 @@ Manager and reference with `--set-secrets` instead. Use the resulting `*.run.app
 URL + `/webhook` as the LINE Messaging API webhook URL (Developers Console →
 channel → Messaging API tab → Webhook URL + "Use webhook" toggle + Verify).
 
-**Current deployment**: `https://pooti-accounting-backend-740865262642.asia-southeast1.run.app`
+</details>
+
+### Verifying a deploy actually landed
+
+```bash
+gcloud run revisions list --service=pooti-accounting-backend --region=asia-southeast1
+```
+Confirm the newest revision's `CREATION_TIMESTAMP` is recent and that it's the one
+receiving 100% traffic (`gcloud run services describe pooti-accounting-backend
+--region=asia-southeast1 --format="table(status.traffic)"`) — a deploy can finish
+building but still be rolling out for a minute before it's actually serving.
