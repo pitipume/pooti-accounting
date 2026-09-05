@@ -144,7 +144,14 @@
   const branchSelect = document.getElementById('branch_code');
   const itemsEl = document.getElementById('items');
   const addRowBtn = document.getElementById('add-row-btn');
-  dateInput.value = new Date().toISOString().slice(0, 10);
+  function todayInBangkok() {
+    // Stores are always physically in Thailand — use the Bangkok calendar
+    // date explicitly rather than the device's local time/timezone, which
+    // toISOString() (UTC) or a misconfigured phone clock would get wrong.
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date());
+  }
+
+  dateInput.value = todayInBangkok();
 
   async function loadBranches() {
     try {
@@ -284,7 +291,7 @@
         `บันทึกสำเร็จ / Saved: ${result.branchName ?? ''} รายรับ ${result.incomeAmount.toLocaleString()} รายจ่าย ${result.expenseAmount.toLocaleString()}`
       );
       document.getElementById('entry-form').reset();
-      dateInput.value = new Date().toISOString().slice(0, 10);
+      dateInput.value = todayInBangkok();
       itemsEl.innerHTML = '';
       for (let i = 0; i < STARTING_ROWS; i++) addItemRow();
     } catch (err) {
