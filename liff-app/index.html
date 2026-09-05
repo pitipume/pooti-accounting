@@ -104,7 +104,8 @@
     color: #1a1a1a;
     border: 1px solid #ccc;
   }
-  #image-preview-wrap { margin-top: 10px; display: flex; align-items: center; gap: 10px; }
+  #image-preview-wrap { margin-top: 10px; align-items: center; gap: 10px; }
+  #image-preview-wrap:not([hidden]) { display: flex; }
   #image-preview { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid #e0e0e0; }
   #remove-image-btn {
     padding: 8px 12px;
