@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Pooti Accounting</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f6f8;
+    color: #1a1a1a;
+    padding: 20px 16px 40px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .subtitle { font-size: 13px; color: #666; margin: 0 0 20px; }
+  form { display: flex; flex-direction: column; gap: 16px; }
+  label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .hint { font-size: 12px; color: #888; font-weight: 400; }
+  input, textarea {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  button {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    background: #06c755;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:disabled { background: #aaa; }
+  #status {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    display: none;
+  }
+  #status.success { display: block; background: #e6f7ed; color: #0a7a3d; }
+  #status.error { display: block; background: #fdecea; color: #b3261e; }
+</style>
+</head>
+<body>
+  <h1>ส่งรายงานประจำวัน</h1>
+  <p class="subtitle">Daily income/expense report — Pooti Accounting</p>
+
+  <form id="entry-form">
+    <div>
+      <label for="business_date">วันที่ / Date</label>
+      <input type="date" id="business_date" required />
+    </div>
+    <div>
+      <label for="income_amount">รายรับ / Income (บาท)</label>
+      <input type="number" id="income_amount" inputmode="decimal" min="0" step="0.01" required />
+    </div>
+    <div>
+      <label for="expense_amount">รายจ่าย / Expense (บาท)</label>
+      <input type="number" id="expense_amount" inputmode="decimal" min="0" step="0.01" required />
+    </div>
+    <div>
+      <label for="notes">หมายเหตุ / Notes <span class="hint">(optional)</span></label>
+      <textarea id="notes"></textarea>
+    </div>
+    <button type="submit" id="submit-btn">บันทึก / Submit</button>
+  </form>
+
+  <div id="status"></div>
+
+<script>
+  // Replaced with the real LIFF ID after registering the LIFF app in LINE console.
+  const LIFF_ID = '2011133020-xLcCRZfd';
+  const API_BASE_URL = 'https://pooti-accounting-backend-740865262642.asia-southeast1.run.app';
+
+  const statusEl = document.getElementById('status');
+  const submitBtn = document.getElementById('submit-btn');
+  const dateInput = document.getElementById('business_date');
+  dateInput.value = new Date().toISOString().slice(0, 10);
+
+  function showStatus(kind, text) {
+    statusEl.className = kind;
+    statusEl.textContent = text;
+  }
+
+  function generateIdempotencyKey() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'idk-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+  }
+
+  async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+    } catch (err) {
+      showStatus('error', 'เปิดผ่านแอป LINE เท่านั้น / Please open this from the LINE app. (' + err.message + ')');
+      submitBtn.disabled = true;
+    }
+  }
+
+  document.getElementById('entry-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    showStatus('success', 'กำลังบันทึก... / Submitting...');
+
+    const payload = {
+      idToken: liff.getIDToken(),
+      businessDate: dateInput.value,
+      incomeAmount: Number(document.getElementById('income_amount').value),
+      expenseAmount: Number(document.getElementById('expense_amount').value),
+      notes: document.getElementById('notes').value,
+      idempotencyKey: generateIdempotencyKey(),
+    };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/submissions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `HTTP ${res.status}`);
+      }
+
+      const result = await res.json();
+      showStatus(
+        'success',
+        `บันทึกสำเร็จ / Saved: ${result.branchName ?? ''} รายรับ ${payload.incomeAmount.toLocaleString()} รายจ่าย ${payload.expenseAmount.toLocaleString()}`
+      );
+      document.getElementById('entry-form').reset();
+      dateInput.value = new Date().toISOString().slice(0, 10);
+    } catch (err) {
+      showStatus('error', 'บันทึกไม่สำเร็จ / Failed: ' + err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  init();
+</script>
+</body>
+</html>

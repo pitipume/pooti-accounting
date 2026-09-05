@@ -1,0 +1,6 @@
+{
+  "hosting": {
+    "public": "liff-app",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+  }
+}
