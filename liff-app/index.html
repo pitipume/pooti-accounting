@@ -57,6 +57,7 @@
   }
   #status.success { display: block; background: #e6f7ed; color: #0a7a3d; }
   #status.error { display: block; background: #fdecea; color: #b3261e; }
+  .invalid { border-color: #b3261e !important; border-width: 2px !important; }
 
   #items { display: flex; flex-direction: column; gap: 10px; }
   .item-row {
@@ -184,6 +185,7 @@
   }
 
   attachImageBtn.addEventListener('click', () => imageInput.click());
+  branchSelect.addEventListener('change', () => branchSelect.classList.remove('invalid'));
 
   // Resizes to at most 1200px on the longest side and re-encodes as JPEG —
   // a raw phone photo (2-5MB) has no accounting value over a ~100-300KB
@@ -263,6 +265,12 @@
       }
 
       branchSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'เลือกสาขา / Select branch';
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      branchSelect.appendChild(placeholder);
       for (const b of branches) {
         const opt = document.createElement('option');
         opt.value = b.branchCode;
@@ -344,9 +352,12 @@
     e.preventDefault();
 
     if (!branchSelect.value) {
+      branchSelect.classList.add('invalid');
       showStatus('error', 'กรุณาเลือกสาขา / Please select a branch.');
+      branchSelect.focus();
       return;
     }
+    branchSelect.classList.remove('invalid');
 
     const items = collectItems();
     if (items.length === 0) {
