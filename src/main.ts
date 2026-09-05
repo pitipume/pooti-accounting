@@ -1,14 +1,17 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   // rawBody is required by SignatureGuard to verify LINE's x-line-signature header
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.enableCors({ origin: 'https://pooti-accounting.web.app' });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+  // Default body limit (100kb) is too small once a submission carries a compressed receipt photo.
+  app.useBodyParser('json', { limit: '5mb' });
 
   const port = process.env.PORT ?? 8080;
   await app.listen(port);

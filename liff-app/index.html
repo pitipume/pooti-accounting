@@ -98,6 +98,16 @@
     color: #06c755;
     border: 1px dashed #06c755;
   }
+  #image-preview-wrap { margin-top: 10px; display: flex; align-items: center; gap: 10px; }
+  #image-preview { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid #e0e0e0; }
+  #remove-image-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #fdecea;
+    color: #b3261e;
+    border-radius: 6px;
+  }
 </style>
 </head>
 <body>
@@ -124,6 +134,15 @@
     <button type="button" id="add-row-btn">+ เพิ่มรายการ / Add row</button>
 
     <div>
+      <label for="receipt_image">แนบรูปใบเสร็จ / Attach receipt photo <span class="hint">(optional)</span></label>
+      <input type="file" id="receipt_image" accept="image/*" capture="environment" />
+      <div id="image-preview-wrap" hidden>
+        <img id="image-preview" alt="Receipt preview" />
+        <button type="button" id="remove-image-btn">ลบรูป / Remove photo</button>
+      </div>
+    </div>
+
+    <div>
       <label for="notes">หมายเหตุ / Notes <span class="hint">(optional)</span></label>
       <textarea id="notes"></textarea>
     </div>
@@ -144,6 +163,63 @@
   const branchSelect = document.getElementById('branch_code');
   const itemsEl = document.getElementById('items');
   const addRowBtn = document.getElementById('add-row-btn');
+  const imageInput = document.getElementById('receipt_image');
+  const imagePreviewWrap = document.getElementById('image-preview-wrap');
+  const imagePreview = document.getElementById('image-preview');
+  const removeImageBtn = document.getElementById('remove-image-btn');
+  let compressedImage = null;
+
+  function clearImage() {
+    compressedImage = null;
+    imageInput.value = '';
+    imagePreviewWrap.hidden = true;
+  }
+
+  // Resizes to at most 1200px on the longest side and re-encodes as JPEG —
+  // a raw phone photo (2-5MB) has no accounting value over a ~100-300KB
+  // compressed one, and this keeps both upload time and Storage cost down.
+  function compressImage(file, maxDim = 1200, quality = 0.68) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ / could not read file'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('เปิดรูปไม่สำเร็จ / could not decode image'));
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height >= width && height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  imageInput.addEventListener('change', async () => {
+    const file = imageInput.files[0];
+    if (!file) return;
+    try {
+      compressedImage = await compressImage(file);
+      imagePreview.src = compressedImage;
+      imagePreviewWrap.hidden = false;
+    } catch (err) {
+      showStatus('error', 'แนบรูปไม่สำเร็จ / Could not attach photo: ' + err.message);
+      clearImage();
+    }
+  });
+
+  removeImageBtn.addEventListener('click', clearImage);
   function todayInBangkok() {
     // Stores are always physically in Thailand — use the Bangkok calendar
     // date explicitly rather than the device's local time/timezone, which
@@ -272,6 +348,7 @@
       notes: document.getElementById('notes').value,
       idempotencyKey: generateIdempotencyKey(),
     };
+    if (compressedImage) payload.imageBase64 = compressedImage;
 
     try {
       const res = await fetch(`${API_BASE_URL}/submissions`, {
@@ -294,6 +371,7 @@
       dateInput.value = todayInBangkok();
       itemsEl.innerHTML = '';
       for (let i = 0; i < STARTING_ROWS; i++) addItemRow();
+      clearImage();
     } catch (err) {
       showStatus('error', 'บันทึกไม่สำเร็จ / Failed: ' + err.message);
     } finally {

@@ -1,13 +1,17 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { EntryRow, SheetsService } from '../sheets/sheets.service';
+import { ImagesService } from '../images/images.service';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { CurrentLiffProfile } from './liff-profile.decorator';
 import { LiffAuthGuard, LiffProfile } from './liff-auth.guard';
 
 @Controller('submissions')
 export class SubmissionsController {
-  constructor(private readonly sheets: SheetsService) {}
+  constructor(
+    private readonly sheets: SheetsService,
+    private readonly images: ImagesService,
+  ) {}
 
   @Post()
   @UseGuards(LiffAuthGuard)
@@ -16,6 +20,10 @@ export class SubmissionsController {
     @CurrentLiffProfile() profile: LiffProfile,
   ): Promise<{ branchCode: string; branchName: string; incomeAmount: number; expenseAmount: number }> {
     const receivedAtTimestamp = new Date().toISOString();
+
+    const imageUrl = dto.imageBase64
+      ? await this.images.uploadReceiptImage(dto.imageBase64, dto.businessDate)
+      : undefined;
 
     // Each line item becomes its own sheet row, sharing the submission's
     // idempotencyKey (suffixed by index so per-row keys stay unique) so the
@@ -34,6 +42,7 @@ export class SubmissionsController {
       idempotencyKey: `${dto.idempotencyKey}:${index}`,
       receivedAtTimestamp,
       status: 'OK',
+      imageUrl,
     }));
 
     await this.sheets.appendEntries(rows);

@@ -49,6 +49,11 @@ export class CreateSubmissionDto {
   @IsString()
   notes?: string;
 
+  /** One optional receipt photo per submission — a browser canvas.toDataURL() string. */
+  @IsOptional()
+  @IsString()
+  imageBase64?: string;
+
   @IsString()
   @IsNotEmpty()
   idempotencyKey!: string;

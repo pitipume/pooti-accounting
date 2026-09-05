@@ -17,6 +17,7 @@ export interface EntryRow {
   receivedAtTimestamp: string;
   status: 'OK' | 'CORRECTED' | 'VOID';
   correctionOfEntryId?: string;
+  imageUrl?: string;
 }
 
 export interface BranchRow {
@@ -56,7 +57,7 @@ export class SheetsService {
 
     await this.sheets.spreadsheets.values.append({
       spreadsheetId: this.spreadsheetId,
-      range: 'Entries!A:O',
+      range: 'Entries!A:P',
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
@@ -76,6 +77,7 @@ export class SheetsService {
           entry.receivedAtTimestamp,
           entry.status,
           entry.correctionOfEntryId ?? '',
+          entry.imageUrl ?? '',
         ]),
       },
     });
