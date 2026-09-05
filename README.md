@@ -140,6 +140,12 @@ gcloud run deploy pooti-accounting-backend \
 Builds `Dockerfile` via Cloud Build, takes ~2-3 minutes, asks to confirm the source
 directory and (once) to enable the Cloud Build API.
 
+**Gotcha**: without a `.gcloudignore` (already added to this repo), `--source` uploads
+the whole directory including `node_modules` — which the Dockerfile reinstalls fresh
+anyway — and can crash with `ValueError: ZIP does not support timestamps before 1980`,
+a known gcloud bug triggered by the symlinks in `node_modules/.bin`. If this ever
+resurfaces, check `.gcloudignore` still excludes `node_modules/`.
+
 <details>
 <summary>First-time service creation (already done once — kept for disaster recovery)</summary>
 

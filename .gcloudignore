@@ -1,0 +1,12 @@
+.git
+node_modules/
+dist/
+.firebase/
+.env
+*.log
+.DS_Store
+service-account.json
+*.serviceaccount.json
+.env-vars-deploy.yaml
+package 2.json
+package-lock 2.json
