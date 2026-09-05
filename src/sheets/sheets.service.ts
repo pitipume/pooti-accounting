@@ -95,6 +95,20 @@ export class SheetsService {
       .map((row) => ({ branchCode: row[0], branchName: row[1] }));
   }
 
+  /** Runtime feature toggles maintained by hand in the FeatureFlags tab — no redeploy needed to flip one. */
+  async getFeatureFlags(): Promise<Record<string, boolean>> {
+    const res = await this.sheets.spreadsheets.values.get({
+      spreadsheetId: this.spreadsheetId,
+      range: 'FeatureFlags!A2:B',
+    });
+    const rows = res.data.values ?? [];
+    const flags: Record<string, boolean> = {};
+    for (const row of rows) {
+      if (row[0]) flags[row[0]] = row[1]?.toUpperCase() === 'TRUE';
+    }
+    return flags;
+  }
+
   async getBranchManagers(): Promise<BranchManagerRow[]> {
     const res = await this.sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
