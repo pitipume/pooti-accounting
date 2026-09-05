@@ -9,15 +9,29 @@ Full architecture, data model, and milestones: see the plan this was built from
 
 ## Status
 
-**M1 + M2 deployed.** NestJS backend (webhook + `/submissions` + `/branches`) is live
-on Cloud Run: `https://pooti-accounting-backend-740865262642.asia-southeast1.run.app`,
-running as `sheets-writer@pooti-accounting.iam.gserviceaccount.com`. LIFF form is live
-on Firebase Hosting (not Vercel — plan changed): `https://pooti-accounting.web.app`,
-opened via `https://liff.line.me/2011133020-xLcCRZfd`. Branch managers submit a
-variable number of income/outcome line items per day, picking their branch from a
-dropdown (`Branches` sheet tab); each item lands as its own row in `Entries`.
+**M1 + M2 deployed, Rich Menu live.** NestJS backend (webhook + `/submissions` +
+`/branches` + `/feature-flags` + `/dashboard/entries`) is live on Cloud Run:
+`https://pooti-accounting-backend-740865262642.asia-southeast1.run.app`, running as
+`sheets-writer@pooti-accounting.iam.gserviceaccount.com`. Frontend is on Firebase
+Hosting (not Vercel — plan changed): `https://pooti-accounting.web.app`. Two pages:
+
+- `liff-app/index.html` — the submission form, opened via
+  `https://liff.line.me/2011133020-xLcCRZfd`. Branch managers submit a variable
+  number of income/outcome line items per day (each its own row in `Entries`),
+  picking their branch from a dropdown (`Branches` tab), optionally attaching one
+  compressed receipt photo per submission (uploaded to the `pooti-accounting-receipts`
+  Cloud Storage bucket, public-by-link, URL written to `Entries` column `image_url`) —
+  gated by the `image_attach` flag in the `FeatureFlags` tab.
+- `liff-app/dashboard.html` — a mobile-first dashboard (not Looker Studio — the
+  mobile-UX bar was explicit and Looker's phone rendering doesn't clear it) comparing
+  all branches, date-filterable (today/7d/month/custom), gated by a shared-secret
+  `?key=` query param (`DASHBOARD_ACCESS_KEY`) rather than LINE login — appropriate
+  for a family-only viewer, not the branch-manager-facing submission flow.
+
+The LINE OA's default Rich Menu (`richmenu-17492f28b4b3128fa6179bbcb82a0623`, created
+via the Messaging API, not the console — see "Rich Menu" below) links to both pages.
 Remaining before M3: real per-manager branch auto-resolution (currently
-manually-picked each submit) and the Rich Menu entry point.
+manually-picked each submit).
 
 ## Before running anything: M0 setup checklist
 
@@ -194,3 +208,22 @@ Confirm the newest revision's `CREATION_TIMESTAMP` is recent and that it's the o
 receiving 100% traffic (`gcloud run services describe pooti-accounting-backend
 --region=asia-southeast1 --format="table(status.traffic)"`) — a deploy can finish
 building but still be rolling out for a minute before it's actually serving.
+
+## Rich Menu
+
+The LINE OA's default Rich Menu was created via the Messaging API (not the
+Developers Console UI), so there's no click-through record of it anywhere but here.
+Two tap areas, left half → the submission form (`https://liff.line.me/2011133020-xLcCRZfd`),
+right half → the dashboard (`https://pooti-accounting.web.app/dashboard.html?key=...`).
+
+To change either link, or swap in a real designed image instead of the current
+plain placeholder: build the new `{ size, areas, ... }` object and PNG, then
+- `POST https://api.line.me/v2/bot/richmenu` (create, get back a `richMenuId`)
+- `POST https://api-data.line.me/v2/bot/richmenu/{richMenuId}/content` (upload the image, `Content-Type: image/png`)
+- `POST https://api.line.me/v2/bot/user/all/richmenu/{richMenuId}` (set as default for everyone)
+- `DELETE https://api.line.me/v2/bot/richmenu/{oldRichMenuId}` (clean up the old one — LINE doesn't do this automatically, and multiple rich menus existing at once is confusing to debug)
+
+All calls need `Authorization: Bearer $LINE_CHANNEL_ACCESS_TOKEN`. List existing
+menus with `GET /v2/bot/richmenu/list`, check the live default with
+`GET /v2/bot/user/all/richmenu` — worth doing both after any change, since a
+leftover second menu is easy to create by accident and easy to miss.
